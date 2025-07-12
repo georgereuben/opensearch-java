@@ -8,5 +8,5 @@ public interface ResponseWithHeaders {
      * Headers are case-insensitive and values are the raw header values.
      * @return immutable map of response headers
      */
-    Map<String, String> headers();
+    Map<String, String> getResponseHeaders();
 }
