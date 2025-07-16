@@ -35,13 +35,16 @@ import java.util.zip.GZIPInputStream;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import javax.lang.model.util.AbstractAnnotationValueVisitor14;
 import javax.net.ssl.SSLHandshakeException;
 import org.opensearch.client.json.JsonpDeserializer;
 import org.opensearch.client.json.JsonpMapper;
 import org.opensearch.client.json.jackson.JacksonJsonpMapper;
 import org.opensearch.client.opensearch.OpenSearchClient;
-import org.opensearch.client.opensearch._types.*;
+import org.opensearch.client.opensearch._types.ErrorCause;
+import org.opensearch.client.opensearch._types.ErrorResponse;
+import org.opensearch.client.opensearch._types.OpenSearchException;
+import org.opensearch.client.opensearch._types.OpenSearchResponseException;
+import org.opensearch.client.opensearch._types.ResponseWithHeaders;
 import org.opensearch.client.opensearch.generic.OpenSearchClientException;
 import org.opensearch.client.transport.Endpoint;
 import org.opensearch.client.transport.GenericEndpoint;
@@ -675,13 +678,13 @@ public class AwsSdk2Transport implements OpenSearchTransport {
         }
 
         String classname = response.getClass().getSimpleName();
-        if(classname.endsWith("Response") || classname.endsWith("Result")) {
-            Class<?>[] interfaces = new Class<?>[] {ResponseWithHeaders.class};
+        if (classname.endsWith("Response") || classname.endsWith("Result")) {
+            Class<?>[] interfaces = new Class<?>[] { ResponseWithHeaders.class };
 
             return (ResponseT) Proxy.newProxyInstance(
-                    response.getClass().getClassLoader(),
-                    interfaces,
-                    new ResponseProxyHandler(response, headers)
+                response.getClass().getClassLoader(),
+                interfaces,
+                new ResponseProxyHandler(response, headers)
             );
         }
 

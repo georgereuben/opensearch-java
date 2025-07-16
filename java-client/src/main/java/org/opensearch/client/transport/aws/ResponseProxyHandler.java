@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
 package org.opensearch.client.transport.aws;
 
 import java.lang.reflect.InvocationHandler;
@@ -16,7 +24,7 @@ public class ResponseProxyHandler implements InvocationHandler {
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-        if("getResponseHeaders".equals(method.getName()) && method.getParameterCount() == 0) {
+        if ("getResponseHeaders".equals(method.getName()) && method.getParameterCount() == 0) {
             return responseHeaders;
         }
 
