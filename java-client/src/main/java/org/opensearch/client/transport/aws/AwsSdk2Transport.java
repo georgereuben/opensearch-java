@@ -14,6 +14,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
+import java.lang.reflect.Proxy;
 import java.lang.reflect.UndeclaredThrowableException;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
@@ -34,14 +35,13 @@ import java.util.zip.GZIPInputStream;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import javax.lang.model.util.AbstractAnnotationValueVisitor14;
 import javax.net.ssl.SSLHandshakeException;
 import org.opensearch.client.json.JsonpDeserializer;
 import org.opensearch.client.json.JsonpMapper;
 import org.opensearch.client.json.jackson.JacksonJsonpMapper;
 import org.opensearch.client.opensearch.OpenSearchClient;
-import org.opensearch.client.opensearch._types.ErrorCause;
-import org.opensearch.client.opensearch._types.ErrorResponse;
-import org.opensearch.client.opensearch._types.OpenSearchException;
+import org.opensearch.client.opensearch._types.*;
 import org.opensearch.client.opensearch.generic.OpenSearchClientException;
 import org.opensearch.client.transport.Endpoint;
 import org.opensearch.client.transport.GenericEndpoint;
@@ -576,24 +576,27 @@ public class AwsSdk2Transport implements OpenSearchTransport {
 
                 // We may have to reset if there is a parse deserialization exception
                 bodyStream = toByteArrayInputStream(bodyStream);
+                Map<String, String> responseHeaders = ResponseHeaderExtractor.extractHeaders(httpResponse);
 
                 try {
                     try (JsonParser parser = mapper.jsonProvider().createParser(bodyStream)) {
                         ErrorT error = errorDeserializer.deserialize(parser, mapper);
-                        throw new OpenSearchException((ErrorResponse) error);
+                        throw new OpenSearchResponseException((ErrorResponse) error, responseHeaders);
                     } catch (MissingRequiredPropertyException errorEx) {
                         bodyStream.reset();
                         return decodeResponse(uri, method, protocol, httpResponse, bodyStream, endpoint, mapper);
                     }
-                } catch (OpenSearchException e) {
+                } catch (OpenSearchResponseException e) {
                     throw e;
+                } catch (OpenSearchException e) {
+                    throw new OpenSearchResponseException(e.response(), responseHeaders);
                 } catch (Exception e) {
                     // can't parse the error - use a general exception
                     ErrorCause.Builder cause = new ErrorCause.Builder();
                     cause.type("http_exception");
                     cause.reason("server returned " + statusCode);
                     ErrorResponse error = ErrorResponse.of(err -> err.status(statusCode).error(cause.build()));
-                    throw new OpenSearchException(error);
+                    throw new OpenSearchResponseException(error, responseHeaders);
                 }
             }
         } else {
@@ -610,11 +613,14 @@ public class AwsSdk2Transport implements OpenSearchTransport {
         @Nonnull Endpoint<?, ResponseT, ErrorT> endpoint,
         JsonpMapper mapper
     ) throws IOException {
+
+        Map<String, String> responseHeaders = ResponseHeaderExtractor.extractHeaders(httpResponse);
+
         if (endpoint instanceof BooleanEndpoint) {
             BooleanEndpoint<?> bep = (BooleanEndpoint<?>) endpoint;
             @SuppressWarnings("unchecked")
             ResponseT response = (ResponseT) new BooleanResponse(bep.getResult(httpResponse.statusCode()));
-            return response;
+            return enhanceWithHeaders(response, responseHeaders);
         } else if (endpoint instanceof JsonEndpoint) {
             JsonEndpoint<?, ResponseT, ?> jsonEndpoint = (JsonEndpoint<?, ResponseT, ?>) endpoint;
             // Successful response
@@ -633,7 +639,7 @@ public class AwsSdk2Transport implements OpenSearchTransport {
                     }
                 }
             }
-            return response;
+            return enhanceWithHeaders(response, responseHeaders);
         } else if (endpoint instanceof GenericEndpoint) {
             @SuppressWarnings("unchecked")
             final GenericEndpoint<?, ResponseT> rawEndpoint = (GenericEndpoint<?, ResponseT>) endpoint;
@@ -660,6 +666,26 @@ public class AwsSdk2Transport implements OpenSearchTransport {
         } else {
             throw new TransportException("Unhandled endpoint type: '" + endpoint.getClass().getName() + "'");
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private <ResponseT> ResponseT enhanceWithHeaders(ResponseT response, Map<String, String> headers) {
+        if (response == null || headers.isEmpty()) {
+            return response;
+        }
+
+        String classname = response.getClass().getSimpleName();
+        if(classname.endsWith("Response") || classname.endsWith("Result")) {
+            Class<?>[] interfaces = new Class<?>[] {ResponseWithHeaders.class};
+
+            return (ResponseT) Proxy.newProxyInstance(
+                    response.getClass().getClassLoader(),
+                    interfaces,
+                    new ResponseProxyHandler(response, headers)
+            );
+        }
+
+        return response;
     }
 
     private <T> Optional<T> getOption(@Nullable TransportOptions options, @Nonnull Function<AwsSdk2TransportOptions, T> getter) {
